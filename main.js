@@ -47,7 +47,7 @@ var Ttsync = function (options) {
 		options = _.defaults(options, defaultOptions);
 	} 
 
-    console.log(options);
+    
     //Setup servers
     var tracServer = require('trac-jsonrpc-client');
 
@@ -156,7 +156,7 @@ var Ttsync = function (options) {
 
         _.each(
             _.filter(currentTickets, function(ticket){
-               return !ttConnector.getCardIdFromTicket(ticket.id);
+               return !ttConnector.getCardFromTicket(ticket.id);
             }), function (ticket) {
 
                 if(!promise) {
