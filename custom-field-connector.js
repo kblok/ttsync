@@ -1,44 +1,52 @@
 var _ = require('underscore');
 var Q = require('q');
 
-var TrelloTracConnector = function(ttsync, options) {
-	
-	var tts = ttsync;
+var TrelloTracConnector = function (ttsync, options) {
 
-	this.getTicket = function (ticketId){
-		return _.find(tts.currentTickets, function(ticket) {
-			return ticket.id == ticketId;
-		});
-	};
+    var tts = ttsync;
 
-	this.getCardIdFromTicket = function (ticketId) {
-		var ticket = this.getTicket(ticketId);
+    this.getTicket = function (ticketId) {
 
-		if(ticket){
-			return ticket[tts.options.ttconnectorConfig.customFieldId];
-		}
-	}
+        return _.find(tts.getTickets(), function (ticket) {
+            return ticket.id === ticketId;
+        });
+    };
 
-	this.getCardFromTicket = function (ticketId) {
-		var cardId = getCardIdFromTicket(ticketId);
+    this.getCardIdFromTicket = function (ticketId) {
+        var ticket = this.getTicket(ticketId);
 
-		if(cardId){
-			return _.find(tts.currentTrelloCards, function(card) {
-				return card.id == cardId;
-			});
-		}
-	}
+        if (ticket) {
+            return ticket[tts.getOptions().ttconnectorConfig.customFieldId];
+        }
+    };
 
-	this.link = function(ticket, card) {
-		var tracDeferred = Q.defer();
-    	var data = [ticket.id, "Link with trello", {}];
+    this.getCardFromTicket = function (ticketId) {
+        var cardId = this.getCardIdFromTicket(ticketId);
+
+        if (cardId) {
+            return _.find(tts.getCards(), function (card) {
+                return card.id === cardId;
+            });
+        }
+    };
+
+    this.link = function (ticket, card) {
+
+        var tracDeferred = Q.defer();
+        var data = [ticket.id, "Link with trello", {}];
         data[2][options.customFieldId] = card.id;
 
-        tts.getTracClient().callRpc('ticket.update',data, tracDeferred.makeNodeResolver());
+        tts.getTracClient().callRpc('ticket.update', data, function (error) {
+            if (error) {
+                tracDeferred.reject(error);
+            } else {
+                tracDeferred.resolve({ ticket: ticket, card: card});
+            }
+        });
 
 
         return tracDeferred.promise;
-	}
+    };
 };
 
 module.exports = TrelloTracConnector;
