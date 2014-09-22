@@ -12,7 +12,6 @@ var Ttsync = function (options) {
         trac : {
             server : '<TRAC_SERVER>',
             auth : {username: '<USER_ID>', password: '<PASSWORD>'},
-
             openTicketsQuery: 'status!=closed'
         },
         trello : {
@@ -210,6 +209,36 @@ var Ttsync = function (options) {
 
     };
 
+    var removeUnlinkedCards = function () {
+        var promise, cardRemovalPromise, unlinkedCards;
+
+        unlinkedCards = _.filter(currentTrelloCards, function (card) {
+            return !ttConnector.getTicketFromCard(card.id);
+        });
+
+        console.log("Unlinked cards:", unlinkedCards.length);
+
+        _.each(unlinkedCards,
+            function (card) {
+
+                if (!promise) {
+                    cardRemovalPromise = Q.defer();
+                    trello.deleteCard(card.id, cardRemovalPromise.makeNodeResolver());
+                    promise = cardRemovalPromise.promise;
+                } else {
+                    promise = promise.then(function () {
+                        cardRemovalPromise = Q.defer();
+
+                        trello.deleteCard(card.id, cardRemovalPromise.makeNodeResolver());
+                        return cardRemovalPromise.promise;
+                    });
+                }
+            });
+
+        return promise;
+
+    };
+
     var setupWebHookListener = function () {
         var server = restify.createServer();
 
@@ -233,6 +262,7 @@ var Ttsync = function (options) {
         initTrello()
             .then(initTrac)
             .then(createMissingCards)
+            .then(removeUnlinkedCards)
             .then(function () {
                 console.log("finished");
             })

@@ -30,6 +30,14 @@ var TrelloTracConnector = function (ttsync, options) {
         }
     };
 
+    this.getTicketFromCard = function (cardId) {
+
+        return _.find(tts.getTickets(), function (ticket) {
+            return ticket[tts.getOptions().ttconnectorConfig.customFieldId] === cardId;
+        });
+
+    };
+
     this.link = function (ticket, card) {
 
         var tracDeferred = Q.defer();
