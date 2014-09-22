@@ -2,6 +2,7 @@ var Trello = require('trello');
 var Q = require('q');
 var _ = require('underscore');
 var fs = require('fs');
+var restify = require('restify');
 
 _.mixin({deepExtend: require('underscore-deep-extend')(_)});
 
@@ -210,21 +211,24 @@ var Ttsync = function (options) {
     };
 
     var setupWebHookListener = function () {
-        var http = require('http');
-        http.createServer(function (req, res) {
+        var server = restify.createServer();
+
+        server.use(restify.bodyParser());
+
+        server.post("/", function (req, res) {
             res.writeHead(200, {'Content-Type': 'text/plain'});
             res.end('hola\n');
-            console.log("called", req.headers.host);
-        }).listen(1337, 'EMMSANBOOK18');
-        console.log('Server running at http://EMMSANBOOK18:1337/');
+            console.log("called", req.params);
+        });
+
+        server.listen(1337, function () {
+            console.log('Server running at http://EMMSANBOOK18:1337/');
+        });
     };
 
     this.init = function () {
 
         setupWebHookListener();
-
-        trello.addWebHook("Ttsync hook", options.trello.callbackUrl, '54073a204e8567ec7e2902c0', function (e, a) { console.log("hook result", e);
-            console.log("hook result", a); });
 
         initTrello()
             .then(initTrac)
