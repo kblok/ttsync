@@ -239,6 +239,39 @@ var Ttsync = function (options) {
 
     };
 
+    //Check if the cards are in the correct list
+    var placeCards = function () {
+        var promise, cardUpdatePromise, webHookCreationPromise;
+
+        _.each(currentTickets,
+            function (ticket) {
+                var card = ttConnector.getCardFromTicket(ticket.id),
+                    correctIdList = getListIdFromTracStatus(ticket.status);
+
+                if (card && card.idList != correctIdList) {
+                    console.log("Correcting the list of card:", card.desc)
+                    if (!promise) {
+                        cardUpdatePromise = Q.defer();
+                        trello.updateCardList(card.id, correctIdList, cardUpdatePromise.makeNodeResolver());
+
+                        promise = cardUpdatePromise.promise;
+                            
+                    } else {
+                        promise = promise.then(function () {
+                            cardUpdatePromise = Q.defer();
+
+                            trello.updateCardList(card, correctIdList, cardUpdatePromise.makeNodeResolver());
+                            return cardUpdatePromise.promise;
+                        });
+                    }
+                }
+            }
+            );
+
+        return promise;
+
+    };
+
     var setupWebHookListener = function () {
         var server = restify.createServer();
 
@@ -263,6 +296,7 @@ var Ttsync = function (options) {
             .then(initTrac)
             .then(createMissingCards)
             .then(removeUnlinkedCards)
+            .then(placeCards)
             .then(function () {
                 console.log("finished");
             })
