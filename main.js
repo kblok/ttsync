@@ -3,6 +3,7 @@ var Q = require('q');
 var _ = require('underscore');
 var fs = require('fs');
 var restify = require('restify');
+var dateFormat = require('dateformat');
 
 _.mixin({deepExtend: require('underscore-deep-extend')(_)});
 
@@ -32,6 +33,45 @@ var Ttsync = function (options) {
                 { statusFromTrac: 'to do', listFromTrello: 'To Do'},
                 { statusFromTrac: 'in progress', listFromTrello: 'Doing'},
                 { statusFromTrac: 'testing', listFromTrello: 'Testing'},
+            ],
+            actionsMap : [
+                { fromList: 'To Do',
+                    toList : 'Doing',
+                    actions: [
+                        { name: 'accept'}
+                    ]
+                    },
+                { fromList: 'Doing',
+                    toList : 'To Do',
+                    actions: [
+                        { name: 'suspend',
+                            operations: [
+                                { name: 'set_current_owner'}
+                            ]}
+                    ]
+                    },
+                { fromList: 'Doing',
+                    toList : 'Testing',
+                    actions: [
+                        { name: 'done',
+                            operations: [
+                                { name: 'set_current_owner'}
+                            ]}
+                    ]
+                    },
+                { fromList: 'Testing',
+                    toList : 'Done',
+                    actions: [
+                        { name: 'release',
+                            operations: [
+                                { name: 'set_current_owner'},
+                                { name: 'set_resolution', value: 'released'}
+                            ]}
+                    ]
+                    },
+            ],
+            userMap : [
+                { trelloUser: 'dariokondratiuk', tracUser: 'dkondratiuk'}
             ]
         }
 
@@ -110,6 +150,18 @@ var Ttsync = function (options) {
         if (ticket && ticket.length && ticket.length >= 3) {
             var ticketInstance = ticket[3];
             ticketInstance.id = ticket[0];
+
+            ticketInstance.refresh = function () {
+                var ticketBuildPromise = Q.defer();
+
+                tracClient.callRpc('ticket.get', [this.id], ticketBuildPromise.makeNodeResolver());
+
+                return ticketBuildPromise.promise.then(function (ticket) {
+                    return ticket[3];
+                });
+
+            };
+
             return ticketInstance;
         }
     };
@@ -133,8 +185,7 @@ var Ttsync = function (options) {
                     ticketObjectBuildFunctionList.push(
                         ticketBuildPromise.promise.then(function (ticket) {
                             currentTickets.push(buildTicketInstance(ticket));
-                        }
-                            )
+                        })
                     );
                 });
 
@@ -197,7 +248,8 @@ var Ttsync = function (options) {
                                 return ttConnector.link(ticket, card);
                             }).then(function (link) {
                                 webHookCreationPromise = Q.defer();
-                                trello.addWebHook("Ttsync hook", options.trello.callbackUrl, link.card.id, webHookCreationPromise.makeNodeResolver());
+                                trello.addWebHook("Ttsync hook", options.trello.callbackUrl, link.card.id,
+                                    webHookCreationPromise.makeNodeResolver());
                                 return webHookCreationPromise.promise;
                             });
                     });
@@ -241,21 +293,21 @@ var Ttsync = function (options) {
 
     //Check if the cards are in the correct list
     var placeCards = function () {
-        var promise, cardUpdatePromise, webHookCreationPromise;
+        var promise, cardUpdatePromise;
 
         _.each(currentTickets,
             function (ticket) {
                 var card = ttConnector.getCardFromTicket(ticket.id),
                     correctIdList = getListIdFromTracStatus(ticket.status);
 
-                if (card && card.idList != correctIdList) {
-                    console.log("Correcting the list of card:", card.desc)
+                if (card && card.idList !== correctIdList) {
+                    console.log("Correcting the list of card:", card.desc);
                     if (!promise) {
                         cardUpdatePromise = Q.defer();
                         trello.updateCardList(card.id, correctIdList, cardUpdatePromise.makeNodeResolver());
 
                         promise = cardUpdatePromise.promise;
-                            
+
                     } else {
                         promise = promise.then(function () {
                             cardUpdatePromise = Q.defer();
@@ -272,6 +324,112 @@ var Ttsync = function (options) {
 
     };
 
+    var getActionArguments = function (ticket, action, tracUser) {
+        var argument = { 'action': action.name,
+                '_ts':  ticket._ts,
+                };
+
+        if (action.operations) {
+            _.each(action.operations, function (operation) {
+
+                switch (operation.name) {
+
+                case 'set_current_owner':
+                    argument.owner = tracUser;
+                    break;
+
+                case 'set_resolution':
+                    argument.resolution = operation.value;
+                    break;
+                }
+            });
+        }
+
+        return argument;
+    };
+
+    var changeTicketStatus = function (ticket, listBefore, listAfter, userName) {
+        var changeStatusPromise,
+            changeStatusDefer;
+
+
+        var actionMap = _.find(options.mapping.actionsMap, function (map) {
+            return map.fromList === listBefore.name && map.toList === listAfter.name;
+        });
+
+        var tracUserMap = _.find(options.mapping.userMap, function (userMap) {
+            return userMap.trelloUser === userName;
+        });
+
+
+        if (actionMap && tracUserMap) {
+            console.log("Actions to execute", actionMap);
+
+            _.each(actionMap.actions, function (action) {
+
+                if (!changeStatusPromise) {
+                    changeStatusDefer = Q.defer();
+
+                    console.log("Action to execute", action.name);
+
+                    tracClient.callRpc('ticket.update', [ticket.id, "Status change from trello by " + userName,
+                        getActionArguments(ticket, action, tracUserMap.tracUser),
+                        false, tracUserMap.tracUser], changeStatusDefer.makeNodeResolver());
+
+                    changeStatusPromise = changeStatusDefer.promise;
+
+                } else {
+
+                    changeStatusPromise.then(function () {
+                        var promise = Q.defer();
+
+                        tracClient.callRpc('ticket.update', [ticket.id, "Status change from trello by " + userName,
+                            getActionArguments(ticket, action, tracUserMap.tracUser),
+                            false, tracUserMap.tracUser], promise.makeNodeResolver());
+
+                        return promise.promise;
+                    });
+                }
+
+            });
+
+            return changeStatusPromise.then(function (e) {
+                console.log("Ticket updated " + ticket.id, e);
+            }).fail(function (e) {
+                console.log("Failed to update ticket " + ticket.id, e);
+            });
+
+        }
+
+        console.log("No action found to update the status of ticket", ticket.id);
+
+    };
+
+    var analizeCardChange = function (changeInfo) {
+        var ticket, ticketBuildPromise = Q.defer();
+
+        if (changeInfo.action.data.listBefore && changeInfo.action.data.listAfter) {
+            //Status changed
+            ticket = ttConnector.getTicketFromCard(changeInfo.action.data.card.id);
+
+            if (ticket) {
+                tracClient.callRpc('ticket.get', [ticket.id], ticketBuildPromise.makeNodeResolver());
+
+                return ticketBuildPromise.promise.then(function (newValues) {
+                    var updatedTicket = buildTicketInstance(newValues);
+
+                    if (changeInfo.action.data.listAfter.id !== getListIdFromTracStatus(updatedTicket.status)) {
+                        console.log("Updating ticket status", updatedTicket.id);
+                        //changeInfo.action.data.card.id
+                        return changeTicketStatus(updatedTicket,
+                            changeInfo.action.data.listBefore, changeInfo.action.data.listAfter, changeInfo.action.memberCreator.username);
+                    }
+                    console.log("Ticket is up-to-date", updatedTicket.id);
+                });
+            }
+        }
+    };
+
     var setupWebHookListener = function () {
         var server = restify.createServer();
 
@@ -279,8 +437,31 @@ var Ttsync = function (options) {
 
         server.post("/", function (req, res) {
             res.writeHead(200, {'Content-Type': 'text/plain'});
-            res.end('hola\n');
-            console.log("called", req.params);
+            var changeInfo = req.params,
+                promise;
+
+            console.log("Card change received", changeInfo.action.data.card.id);
+            promise = analizeCardChange(changeInfo);
+
+            if (promise) {
+                promise.fail(function (err) {
+                    console.log("Error", err);
+                });
+            } else {
+                console.log("Nothing to do with this card change");
+            }
+
+
+            res.send();
+        });
+
+        //Used by trello to check if the url is valid
+        /*jslint unparam:false*/
+        /*ignore unused re qparam*/
+        server.head("/", function (req, res) {
+            /*jslint unparam:true*/
+            res.writeHead(200, {'Content-Type': 'text/plain'});
+            res.send();
         });
 
         server.listen(1337, function () {
@@ -306,7 +487,6 @@ var Ttsync = function (options) {
             //then(updateTrelloFromTrac());
 
     };
-
 };
 
 var options = {};
@@ -317,4 +497,5 @@ if (fs.existsSync('./config.js')) {
 
 var ttsync = new Ttsync(options);
 ttsync.init();
+
 
