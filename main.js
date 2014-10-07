@@ -35,18 +35,22 @@ var Ttsync = function (options) {
                 { statusFromTrac: 'testing', listFromTrello: 'Testing'},
             ],
             actionsMap : [
+                //From Todo
                 { fromList: 'To Do',
                     toList : 'Doing',
                     actions: [
-                        { name: 'accept'}
-                    ]
+                        { name: 'accept',
+                            operations: [
+                                { update: 'action_accept_reassign_owner', setCurrentUser: true},
+                                { update: 'owner', setCurrentUser: true},
+                            ]}]
                     },
                 { fromList: 'Doing',
                     toList : 'To Do',
                     actions: [
                         { name: 'suspend',
                             operations: [
-                                { name: 'set_current_owner'}
+                                { update: 'owner', setCurrentUser: true}
                             ]}
                     ]
                     },
@@ -55,7 +59,8 @@ var Ttsync = function (options) {
                     actions: [
                         { name: 'done',
                             operations: [
-                                { name: 'set_current_owner'}
+                                { update: 'action_done_reassign_owner', fieldValue: 'reporter'},
+                                { update: 'last_operator', fieldValue: 'owner'},
                             ]}
                     ]
                     },
@@ -64,8 +69,28 @@ var Ttsync = function (options) {
                     actions: [
                         { name: 'release',
                             operations: [
-                                { name: 'set_current_owner'},
-                                { name: 'set_resolution', value: 'released'}
+                                { update: 'owner', setCurrentUser: true},
+                                { update: 'resolution', value: 'released'}
+                            ]}
+                    ]
+                    },
+                { fromList: 'Testing',
+                    toList : 'To Do',
+                    actions: [
+                        { name: 'enhance',
+                            operations: [
+                                { update: 'owner', fieldValue: 'last_operator'}
+                            ]}
+                    ]
+                    },
+                //From Done
+                { fromList: 'Done',
+                    toList : 'To Do',
+                    actions: [
+                        { name: 'enhance',
+                            operations: [
+                                { update: 'action_enhance_reassign_owner', fieldValue: 'last_operator'},
+                                { update: 'owner', setCurrentUser: true},
                             ]}
                     ]
                     },
@@ -291,64 +316,76 @@ var Ttsync = function (options) {
 
     };
 
+    var placeCard = function (ticket, card, promise) {
+        var correctIdList = getListIdFromTracStatus(ticket.status),
+            cardUpdatePromise;
+
+        if (card && card.idList !== correctIdList) {
+            console.log("Correcting the list of card:", card.desc);
+            if (!promise) {
+                cardUpdatePromise = Q.defer();
+                trello.updateCardList(card.id, correctIdList, cardUpdatePromise.makeNodeResolver());
+
+                promise = cardUpdatePromise.promise;
+
+            } else {
+                promise = promise.then(function () {
+                    cardUpdatePromise = Q.defer();
+
+                    trello.updateCardList(card.id, correctIdList, cardUpdatePromise.makeNodeResolver());
+                    return cardUpdatePromise.promise;
+                });
+            }
+        }
+
+        return promise;
+    };
+
     //Check if the cards are in the correct list
     var placeCards = function () {
-        var promise, cardUpdatePromise;
+        var mainPromise, lastPromise;
 
         _.each(currentTickets,
             function (ticket) {
-                var card = ttConnector.getCardFromTicket(ticket.id),
-                    correctIdList = getListIdFromTracStatus(ticket.status);
+                var card = ttConnector.getCardFromTicket(ticket.id);
+                lastPromise = placeCard(ticket, card, lastPromise);
 
-                if (card && card.idList !== correctIdList) {
-                    console.log("Correcting the list of card:", card.desc);
-                    if (!promise) {
-                        cardUpdatePromise = Q.defer();
-                        trello.updateCardList(card.id, correctIdList, cardUpdatePromise.makeNodeResolver());
-
-                        promise = cardUpdatePromise.promise;
-
-                    } else {
-                        promise = promise.then(function () {
-                            cardUpdatePromise = Q.defer();
-
-                            trello.updateCardList(card, correctIdList, cardUpdatePromise.makeNodeResolver());
-                            return cardUpdatePromise.promise;
-                        });
-                    }
+                if (!mainPromise) {
+                    mainPromise = lastPromise;
                 }
-            }
-            );
+            });
 
-        return promise;
+        return mainPromise;
 
     };
 
     var getActionArguments = function (ticket, action, tracUser) {
-        var argument = { 'action': action.name,
+        var args = { 'action': action.name,
                 '_ts':  ticket._ts,
                 };
 
         if (action.operations) {
             _.each(action.operations, function (operation) {
 
-                switch (operation.name) {
+                if (operation.update) {
+                    if (operation.fieldValue) {
+                        args[operation.update] = ticket[operation.fieldValue];
 
-                case 'set_current_owner':
-                    argument.owner = tracUser;
-                    break;
+                    } else if (operation.setCurrentUser) {
+                        args[operation.update] = tracUser;
 
-                case 'set_resolution':
-                    argument.resolution = operation.value;
-                    break;
+                    } else if (operation.value) {
+                        args[operation.update] = operation.value;
+
+                    }
                 }
             });
         }
-
-        return argument;
+        console.log(args);
+        return args;
     };
 
-    var changeTicketStatus = function (ticket, listBefore, listAfter, userName) {
+    var changeTicketStatus = function (ticket, listBefore, listAfter, userName, cardId) {
         var changeStatusPromise,
             changeStatusDefer;
 
@@ -397,12 +434,12 @@ var Ttsync = function (options) {
                 console.log("Ticket updated " + ticket.id, e);
             }).fail(function (e) {
                 console.log("Failed to update ticket " + ticket.id, e);
+                return placeCard(ticket, ttConnector.getCard(cardId));
             });
 
         }
-
         console.log("No action found to update the status of ticket", ticket.id);
-
+        return placeCard(ticket, ttConnector.getCard(cardId));
     };
 
     var analizeCardChange = function (changeInfo) {
@@ -419,10 +456,9 @@ var Ttsync = function (options) {
                     var updatedTicket = buildTicketInstance(newValues);
 
                     if (changeInfo.action.data.listAfter.id !== getListIdFromTracStatus(updatedTicket.status)) {
-                        console.log("Updating ticket status", updatedTicket.id);
-                        //changeInfo.action.data.card.id
                         return changeTicketStatus(updatedTicket,
-                            changeInfo.action.data.listBefore, changeInfo.action.data.listAfter, changeInfo.action.memberCreator.username);
+                            changeInfo.action.data.listBefore, changeInfo.action.data.listAfter, changeInfo.action.memberCreator.username,
+                            changeInfo.action.data.card.id);
                     }
                     console.log("Ticket is up-to-date", updatedTicket.id);
                 });

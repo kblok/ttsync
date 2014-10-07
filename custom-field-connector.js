@@ -12,6 +12,13 @@ var TrelloTracConnector = function (ttsync, options) {
         });
     };
 
+    this.getCard = function (cardId) {
+
+        return _.find(tts.getCards(), function (card) {
+            return card.id === cardId;
+        });
+    };
+
     this.getCardIdFromTicket = function (ticketId) {
         var ticket = this.getTicket(ticketId);
 
@@ -43,6 +50,7 @@ var TrelloTracConnector = function (ttsync, options) {
         var tracDeferred = Q.defer();
         var data = [ticket.id, "Link with trello", {}];
         data[2][options.customFieldId] = card.id;
+        ticket[options.customFieldId] = card.id;
 
         tts.getTracClient().callRpc('ticket.update', data, function (error) {
             if (error) {
