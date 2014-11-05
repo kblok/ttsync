@@ -1,12 +1,12 @@
+//Dependencies
 var Trello = require('trello');
 var Q = require('q');
 var _ = require('underscore');
-var fs = require('fs');
 var restify = require('restify');
 
 _.mixin({ deepExtend: require('underscore-deep-extend')(_) });
 
-var Ttsync = function (options) {
+module.exports = function (options) {
     
     var defaultOptions = {
         trac : {
@@ -499,14 +499,3 @@ var Ttsync = function (options) {
 
     };
 };
-
-var options = {};
-
-if (fs.existsSync('./config.js')) {
-    options = require('./config');
-}
-
-var ttsync = new Ttsync(options);
-ttsync.init();
-
-

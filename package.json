@@ -4,7 +4,8 @@
   "description": "Trac and Trello sync tool",
   "main": "index.js",
   "scripts": {
-    "test": "mocha ./test/test.js"
+    "test": "mocha ./test/test.js",
+    "example":  "example.js"
   },
   "repository": {
     "type": "git",
