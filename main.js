@@ -3,7 +3,6 @@ var Q = require('q');
 var _ = require('underscore');
 var fs = require('fs');
 var restify = require('restify');
-var dateFormat = require('dateformat');
 
 _.mixin({deepExtend: require('underscore-deep-extend')(_)});
 
@@ -254,8 +253,10 @@ var Ttsync = function (options) {
                     trello.addCard(ticket.summary, ticket.description, getListIdFromTracStatus(ticket.status), cardCreationPromise.makeNodeResolver());
 
                     promise = cardCreationPromise.promise.then(function (card) {
+                        currentTrelloCards.push(card);
                         return ttConnector.link(ticket, card);
                     }).then(function (link) {
+                            console.log("Hooking new card");
                         webHookCreationPromise = Q.defer();
                         trello.addWebHook("Ttsync hook", options.trello.callbackUrl, link.card.id, webHookCreationPromise.makeNodeResolver());
                         return webHookCreationPromise.promise;
@@ -360,7 +361,8 @@ var Ttsync = function (options) {
     };
 
     var getActionArguments = function (ticket, action, tracUser) {
-        var args = { 'action': action.name,
+        var args = {
+            'action': action.name,
                 '_ts':  ticket._ts,
                 };
 
@@ -466,11 +468,35 @@ var Ttsync = function (options) {
         }
     };
 
+    var analizeTicketChangeFromTrac = function (ticketId) {
+        var ticketBuildPromise = Q.defer(),
+            ticket = ttConnector.getTicket(ticketId);
+        
+        //Get new data
+        tracClient.callRpc('ticket.get', [ticketId], ticketBuildPromise.makeNodeResolver());
+        
+        ticketBuildPromise.promise.then(function (updatedTicket) {
+            if (ticket) {
+                //remove old ticket from array
+                currentTickets.remove(ticket);
+            }
+            ticket = buildTicketInstance(updatedTicket);
+            currentTickets.push(ticket);
+            createMissingCards();
+        });
+
+    };
+    
     var setupWebHookListener = function () {
         var server = restify.createServer();
 
         server.use(restify.bodyParser());
 
+        server.post("/trac", function (req) {
+            console.log(req.params);
+            analizeTicketChangeFromTrac(req.params.id);
+        });
+        
         server.post("/", function (req, res) {
             res.writeHead(200, {'Content-Type': 'text/plain'});
             var changeInfo = req.params,
