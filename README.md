@@ -1,6 +1,6 @@
 # TTSync :: Trac-Trello sync tool#
 
-TTsync is an almost bidirectional sync tool between Trac an Trello.
+TTsync is an almost bidirectional sync tool between Trac and Trello.
 
 ## Data compatibility ##
 
@@ -13,21 +13,21 @@ Ticket|Card
 Status|List
 Actions|Transtions between lists
 
-From now on this words will be used directly without clarifying if it is from trello or from trac.
+From now on these words will be used directly without clarifying if the concept is from Trello or Trac.
 
-## Sycing ##
+## Syncing ##
 
 **One way sync<br/>**
 It uses **Trac** as the master repository of tickets. It means that it will create cards for each ticket and it will delete cards if these are not related with any ticket.
 
 **Bidirectional syncing<br/>**
-Status syncing is bidirectional. If the status is changed the card will be moved to the right list. If the card is moved from one list to another it will execute de necessary actions in trac in order to change the ticket to the corresponding status.
+Status syncing is bidirectional. If the status is changed the card will be moved to the right list. If the card is moved from one list to another it will execute the necessary actions in Trac in order to change the ticket to the corresponding status.
 
 ## Main Dependencies ##
 * [trello](https://www.npmjs.org/package/trello): Used to consume the Trello API
 * [trac-jsonrpc-client](https://www.npmjs.org/package/trac-jsonrpc-client): Used to consume the Trac API 
 
-Temporarly it uses [another trello module repository](https://github.com/kblok/trello "another repository") until [this pull request](https://github.com/GraemeF/trello/pull/9 "this pull request for the Trello module"), which upgrades [restler](https://www.npmjs.org/package/restler "restler"), is approved 
+Temporarily it uses [another Trello module repository](https://github.com/kblok/trello "another repository") until [this pull request](https://github.com/GraemeF/trello/pull/9 "this pull request for the Trello module"), which upgrades [restler](https://www.npmjs.org/package/restler "restler"), is approved.
 
 ## Instalation ##
 ```
@@ -46,7 +46,7 @@ ttsync.init();
 ```
 
 ## Configuration ##
-The options varible should have the needed data to set-up :
+The options variable should have the needed data in order to set-up TTSync:
 
 1. Trello API consumer
 2. Trac API consumer
@@ -54,11 +54,11 @@ The options varible should have the needed data to set-up :
 4. The Mapping
 
 ### Trello configuration ###
-The following data is needed to configure the trello API consumer
+The following data is needed to configure the Trello API consumer
 
-1. **key and token**: Go to the [trello module help](https://github.com/GraemeF/trello "trello module help") if you need more informatión about how to get this data. 
+1. **key and token**: Go to the [Trello module help](https://github.com/GraemeF/trello "Trello module help") if you need more information about how to get this data. 
 2. **boardId**: A board's URL has the boardId in it.
-3. **callbackUrl**: An URL with which TTSync will create [webhooks in Trello](https://trello.com/docs/gettingstarted/webhooks.html "webhooks in trello").
+3. **callbackUrl**: An URL which TTSync will use create [webhooks in Trello](https://trello.com/docs/gettingstarted/webhooks.html "webhooks in Trello").
 4. **localCallbackUrlPort**: Port number for the webhook listener.
  
 
@@ -75,11 +75,11 @@ var option = {
 ```
 
 ### Trac configuration ###
-The following data is needed to configure the Trac API consumer
+The following data is needed to configure the Trac API consumer:
 
-1. **server**: Trac server + project name + '/login/jsonrpc'. Ex: 'http://trac/demo.project/login/jsonrpc'
+1. **server**: Trac server + project name + '/login/jsonrpc'. Ie: 'http://trac/demo.project/login/jsonrpc'
 2. **username** and **password**
-3. **openTicketsQuery**: Query sent to the trac API. This will be the universe o tickets that will be sent to Trello.
+3. **openTicketsQuery**: Query sent to the Trac API. This will be the universe of tickets that will be sent to Trello.
 
 ```javascript
 var option = {
@@ -92,7 +92,7 @@ var option = {
 ```
 
 ### Connector Configuration ###
-The way that ticket and a card are linked is not hardcoded in the code. The linking method can be modified or extended.
+The way that a ticket and a card are linked is not hardcoded in the code. The linking method can be modified or extended.
 
 A ttconnector is a module which implements these methods:
 
@@ -119,18 +119,18 @@ var option = {
 ```
 
 ### Mapping ###
-Mapping is perhaps the most hard section to configure and requires a deeper analysis.
+Mapping is perhaps the most difficult section to configure and requires a deeper analysis.
 
 It has three sections:
 
 1. **userMap**: List of relations between a trelloUser and a tracUser
 2. **statusListMap**: List of relations beetween statusFromTrac and listFromTrello
-3. **actionsMap**: List which tells TTSync which actions has to be performed in trac when a card changes from one list to another. Each item needs the following data:
+3. **actionsMap**: List that tells TTSync which actions have to be performed in Trac when a card changes from one list to another. Each item needs the following data:
 	1. **fromList**: List's friendly name where the card was moved from
 	2. **toList**: List's friendly name where the card was moved to
 	3. **actions**: TTSync is prepared to perform more than one action if it is needed. Each action should have these properties:
 		1. **name**: The action name (you can find in the trac.ini)
-		2. **operations**: It is a list of fields that it needs to update or that the operation requires (Ex: a change of owner). An operation can have this properties:
+		2. **operations**: List of fields that it needs to update or that the operation requires (Ie: a change of owner). An operation can have these properties:
 			1. **update**: field to update
 			2. **setCurrentUser** (optional bool): It will set the current user
 			3. **fieldValue** (optional): It will set the **update** field with the value of the **fieldValue** field
@@ -175,13 +175,13 @@ var ttsync = new Ttsync(options);
 ttsync.init();
 ```
 
-When the init method is called. TTSync will do all the tasks needed in order to get the trello board in sync with the trac project. After that a server will be running waiting for:
+When the init method is called TTSync will execute all the tasks needed in order to get the Trello board in sync with the Trac project. After that, a server will be running waiting for:
 
-* POST requests from Trello (in the port configured) with any change in the cards
-* POST requests from Trac (in the port configured) but to the **trac** resource, ex: "http://localhost:1337/trac". It will listen to any changes in tickets and will reflect these changes in trello
+* POST requests from Trello (to the port configured) with any change in the cards.
+* POST requests from Trac (to the port configured) but to the **trac** resource, Ie: "http://localhost:1337/trac". It will listen to any changes in tickets and will reflect these changes in Trello.
 
-Trac is able to make post request to TTSync installing a plugin
+Trac is able to make post requests to TTSync installing a plugin
 
 ## Pendings ##
 
-- [ ] Publish the trac plugin which makes a request when a ticket changes
+- [ ] Publish the Trac plugin which makes a request when a ticket changes
