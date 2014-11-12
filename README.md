@@ -185,3 +185,4 @@ Trac is able to make post requests to TTSync installing a plugin
 ## Pendings ##
 
 - [ ] Publish the Trac plugin which makes a request when a ticket changes
+- [ ] Implement verbosity
