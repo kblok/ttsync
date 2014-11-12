@@ -31,7 +31,7 @@
   },
   "dependencies": {
     "trac-jsonrpc-client": "^0.2.1",
-    "trello": "^0.2.0",
+    "trello": "git+https://github.com/kblok/trello.git#master",
     "q": "^1.0.1",
     "underscore": "^1.6.0",
     "restify": "^2.8.3"
